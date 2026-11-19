@@ -1,3 +1,7 @@
 # Only runtime dependency. Pinned exactly so output stays identical across machines.
 # Tested: identical Markdown on 1.28.2 and 2.1; 1.28.2 avoids 2.x's optional ML extras.
 pymupdf==1.28.2
+
+# Web app (Total Worked Hours)
+Flask>=3.0
+openpyxl>=3.1

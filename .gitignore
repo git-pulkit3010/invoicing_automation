@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.env
+.env.local
+_ui_*.png
+_dom.html
+
+# Sample client/HR data - kept local, not published to the public repo.
+# compnova_sample_files/ holds the ATT time report (named contractors,
+# ATTUIDs, per-day hours) and client vendor work orders.
+# invoices/ holds generated invoice output.
+compnova_sample_files/
+invoices/

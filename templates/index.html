@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CompNova · Total Worked Hours</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">CN</span>
+      <div>
+        <h1>Total Worked Hours</h1>
+        <p class="sub">ATT time report &middot; {{ source }} &middot; {{ contractor_count }} contractors &middot; {{ row_count }} rows</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <h2>1 &middot; Choose the person</h2>
+      <label for="contractor">Contractor (first + surname)</label>
+      <div class="field">
+        <select id="contractor">
+          <option value="">Loading&hellip;</option>
+        </select>
+      </div>
+      <p class="hint" id="name-hint">&nbsp;</p>
+
+      <h2>2 &middot; Choose the period</h2>
+      <div class="field-row">
+        <div class="field">
+          <label for="month">Month</label>
+          <select id="month"></select>
+        </div>
+        <div class="field">
+          <label for="year">Year</label>
+          <select id="year"></select>
+        </div>
+      </div>
+      <p class="hint" id="period-hint">&nbsp;</p>
+
+      <button id="compute" class="primary" disabled>Compute hours</button>
+      <p class="error" id="error" hidden></p>
+    </section>
+
+    <section class="panel results" id="results">
+      <div class="placeholder" id="placeholder">
+        <div class="ph-icon">&#9200;</div>
+        <p>Select a contractor and a month, then press <strong>Compute hours</strong>.</p>
+      </div>
+
+      <div id="result-body" hidden>
+        <div class="result-head">
+          <div>
+            <h2 id="r-name">&nbsp;</h2>
+            <p class="sub" id="r-meta">&nbsp;</p>
+          </div>
+          <a class="btn ghost" id="r-export" href="#" download>Export CSV</a>
+        </div>
+
+        <div class="hero">
+          <span class="hero-label">Total worked hours</span>
+          <span class="hero-value"><span id="r-total">0</span> <small>hrs</small></span>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat">
+            <span class="stat-label">Days recorded</span>
+            <span class="stat-value" id="r-days">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Overtime</span>
+            <span class="stat-value" id="r-ot">0 hrs</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Full-month benchmark</span>
+            <span class="stat-value" id="r-benchmark">0 hrs</span>
+          </div>
+          <div class="stat" id="r-diff-box">
+            <span class="stat-label">Difference</span>
+            <span class="stat-value" id="r-diff">0 hrs</span>
+          </div>
+        </div>
+
+        <h3>Verified weekly breakdown</h3>
+        <table class="grid">
+          <thead>
+            <tr><th>Week</th><th class="num">Days recorded</th><th class="num">Hours</th><th class="num">Workbook total</th></tr>
+          </thead>
+          <tbody id="r-weeks"></tbody>
+          <tfoot>
+            <tr><th>Total</th><th class="num" id="r-total-days">0</th><th class="num" id="r-total-hours">0</th><th class="num">&mdash;</th></tr>
+          </tfoot>
+        </table>
+
+        <div id="r-notice-box" class="notice" hidden>
+          <h3 id="r-notice-title">Missing weekdays</h3>
+          <ul id="r-notice-list"></ul>
+        </div>
+
+        <h3>Audit results</h3>
+        <table class="grid audits">
+          <thead><tr><th>Check</th><th>Finding</th></tr></thead>
+          <tbody id="r-audits"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
