@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Source data - never push
+#
+# These are real customer, vendor and contractor records (timesheets,
+# invoices, work orders). They contain personal data and commercial terms, so
+# they stay on this machine. The tool reads them from the working directory.
+# ---------------------------------------------------------------------------
+*.xlsx
+*.xls
+*.xlsm
+*.pdf
+
+# Explicitly guard the known source folders in case a non-standard extension
+# is used later.
+invoices/
+work_orders/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# ---------------------------------------------------------------------------
+# Generated reports
+# ---------------------------------------------------------------------------
+reconciliation_*.txt
+reconciliation_*.json
+reconciliation_*.csv
+*.report.txt
+
+# ---------------------------------------------------------------------------
+# OS / editor noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
