@@ -1,0 +1,8 @@
+# Real invoices, work orders, timesheets and run outputs never go into git.
+data/
+work/
+*.pdf
+*.xlsx
+*.db
+__pycache__/
+.pytest_cache/
