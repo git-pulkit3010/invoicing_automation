@@ -64,8 +64,11 @@ Useful flags for `reconcile`:
 | `--include-out-of-period` | include time report rows outside the report period |
 | `--allow-missing-work-order` | downgrade a missing work order from FAIL to WARN |
 
-Exit codes: `0` all reconciled, `1` at least one failure, `2` load or usage error.
-That makes the tool usable directly as a CI gate.
+Exit codes: `0` at least one line reconciled with no failures or processing
+errors, `1` at least one failed line, `2` load, parsing or usage error.
+An empty batch or a PDF with no recognizable billable line is an error, so the
+tool can be used as a CI gate. Other invoices continue processing after a PDF
+error.
 
 ---
 
@@ -165,6 +168,13 @@ symbol in a separate text run) and `83` split across runs.
 
 Only a `FAIL` downgrades a reconciliation. `WARN` findings are advisories - a
 gap in the timesheet is a business fact to raise, not a billing discrepancy.
+If a work order has no consultant name, a unique vendor match can be used but
+gets a `work_order_vendor_fallback` warning for human review. A work order
+named for another consultant cannot authorize the invoice.
+
+The CSV has a `record_type` column. `reconciliation` rows include advisory and
+failure details; `error` rows identify PDFs that could not be reconciled; and
+`unlinked_work_order` rows identify work orders with no matched invoice.
 
 ---
 

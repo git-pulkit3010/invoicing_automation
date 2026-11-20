@@ -147,6 +147,8 @@ def cmd_reconcile(args) -> int:
             or needle in (r.invoice.filename_client or "").lower()
             or needle in r.invoice.path.name.lower()
         ]
+        if not result.reconciliations:
+            result.errors.append(f"no invoice lines matched --only {args.only!r}")
 
     if args.format == "json":
         rendered = render_json(result)

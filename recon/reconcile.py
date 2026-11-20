@@ -131,12 +131,19 @@ class Reconciler:
                 result.errors.append(f"{path.name}: could not parse invoice ({exc})")
                 continue
             result.invoices.append(invoice)
+            if not invoice.lines:
+                result.errors.append(
+                    f"{path.name}: no billable line item could be identified"
+                )
+                continue
 
             for line in invoice.lines:
                 contractor = self._resolve_contractor(roster, line.contractor_name)
                 work_order = self.match_work_order(work_orders, line.contractor_name)
+                vendor_fallback = False
                 if work_order is None:
                     work_order = self._match_work_order_by_vendor(work_orders, invoice)
+                    vendor_fallback = work_order is not None
                 if work_order is not None:
                     used.add(work_order.path)
 
@@ -144,9 +151,20 @@ class Reconciler:
                     invoice=invoice, line=line, contractor=contractor, work_order=work_order
                 )
                 reconciliation.checks = self._evaluate(invoice, line, contractor, work_order)
+                if vendor_fallback:
+                    reconciliation.checks.append(Check(
+                        key="work_order_vendor_fallback",
+                        label="Work order matched by vendor only",
+                        status=Status.WARN,
+                        expected="consultant name match",
+                        actual=work_order.path.name,
+                        detail="confirm this work order belongs to the invoiced consultant",
+                    ))
                 result.reconciliations.append(reconciliation)
 
         result.unlinked_work_orders = [w for w in work_orders if w.path not in used]
+        if not result.reconciliations:
+            result.errors.append("no invoice lines were reconciled")
         return result
 
     # -- helpers ---------------------------------------------------------
@@ -173,16 +191,19 @@ class Reconciler:
         client = invoice.filename_client or invoice.vendor_name
         if not client:
             return None
-        best: Optional[WorkOrder] = None
-        best_score = 0.0
+        candidates: list[WorkOrder] = []
         for work_order in work_orders:
+            # A named order for someone else cannot authorize this invoice.
+            if work_order.consultant_name:
+                continue
             for label in (work_order.vendor_name, work_order.client_name):
                 if not label:
                     continue
                 score = similarity(client, label)
-                if score > best_score:
-                    best, best_score = work_order, score
-        return best if best_score >= 0.5 else None
+                if score >= 0.5:
+                    candidates.append(work_order)
+                    break
+        return candidates[0] if len(candidates) == 1 else None
 
     # -- the checks ------------------------------------------------------
 

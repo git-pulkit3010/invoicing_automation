@@ -52,6 +52,7 @@ def render_console(result: RunResult, verbose: bool = False) -> str:
         )
     out.append(f"Invoices    : {len(result.invoices)}")
     out.append(f"Work orders : {len(result.work_orders)}")
+    out.append(f"Lines       : {len(result.reconciliations)}")
     out.append("")
 
     if result.errors:
@@ -215,6 +216,7 @@ def render_json(result: RunResult) -> str:
             "failed": result.failed,
             "warned": result.warned,
             "invoices": len(result.invoices),
+            "reconciled_lines": len(result.reconciliations),
             "work_orders": len(result.work_orders),
         },
         "period": (
@@ -286,10 +288,11 @@ def render_csv(result: RunResult) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow([
-        "invoice_file", "client", "invoice_number", "contractor", "attuid",
+        "record_type", "invoice_file", "client", "invoice_number", "contractor", "attuid",
         "invoice_hours", "timesheet_hours", "days_recorded",
         "invoice_rate", "work_order_rate", "invoice_amount", "expected_amount",
         "difference", "invoice_period", "work_order_window", "result",
+        "warnings", "detail",
     ])
     for reconciliation in result.reconciliations:
         invoice = reconciliation.invoice
@@ -302,6 +305,7 @@ def render_csv(result: RunResult) -> str:
             expected = contractor.total_hours * work_order.rate
 
         writer.writerow([
+            "reconciliation",
             invoice.path.name,
             invoice.vendor_name or "",
             invoice.invoice_number or "",
@@ -320,5 +324,17 @@ def render_csv(result: RunResult) -> str:
             if work_order and work_order.auth_start
             else "",
             reconciliation.status.value,
+            "; ".join(f"{c.label}: {c.detail}" for c in reconciliation.warnings),
+            "; ".join(f"{c.label}: {c.detail}" for c in reconciliation.failed),
+        ])
+    for error in result.errors:
+        prefix = error.partition(":")[0]
+        invoice_file = prefix if prefix.lower().endswith(".pdf") else ""
+        writer.writerow(["error", invoice_file, *([""] * 14), "FAIL", "", error])
+    for work_order in result.unlinked_work_orders:
+        writer.writerow([
+            "unlinked_work_order", "", work_order.vendor_name or "", "",
+            work_order.consultant_name or "", *([""] * 11), "", "",
+            f"{work_order.path.name}: no matched invoice",
         ])
     return buffer.getvalue()
