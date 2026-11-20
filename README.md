@@ -1,12 +1,15 @@
 # invoice-check
 
 Checks vendor invoices before payment against the ATT Time Report and the work orders, and gives
-each invoice one of three answers:
+each invoice one of three verdicts (the same verdicts and rules as Pulkit's invoice-reconciliation skill):
 
-- **GO**: go ahead with payment
-- **NO**: do not pay, with every reason listed
-- **REVIEW**: a person must check it (a scanned invoice, values that could not be verified, overtime,
-  a consultant who matches two people)
+- **MATCH**: go ahead with payment
+- **MISMATCH**: do not pay; hours, rate or amount disagree, with every reason listed
+- **REVIEW_REQUIRED**: a person must check it, because something is missing or uncertain:
+  - no work order in force (expired or missing)
+  - a consultant who isn't in the timesheet or matches two people
+  - a scanned invoice, or values that could not be verified
+  - overtime
 
 AI only reads invoices it has to; code makes every decision. On real data, a monthly batch takes
 about 13 s, and a batch of 200 clean invoices takes 3.3 s with no AI at all. See [TIMINGS.md](TIMINGS.md).
@@ -20,9 +23,10 @@ work order PDFs ────────► │ wo-ingest: work_orders (rate, da
                           └────────────────────────────────▲───────────────────────────────────┘
                                                            │ every check queries the database
 invoice PDFs ─► 1 convert ─► 2 rules read ─► 3 verify ─────┴─► settled ───────────────► 5 decide ─► report
-               (Markdown)   (Pulkit's      (numbers on the                                  GO / NO / REVIEW
+               (Markdown)   (Pulkit's      (numbers on the
                              extractor)     invoice? sums?    misread risk / scan
                                             known person?) ─► 4 agent reads Markdown ─► (same checks)
+                                                                                                MATCH / MISMATCH / REVIEW_REQUIRED
 ```
 
 1. **Convert**: each PDF becomes Markdown. PDFs with no text layer are marked as scanned.
@@ -31,27 +35,33 @@ invoice PDFs ─► 1 convert ─► 2 rules read ─► 3 verify ────�
 3. **Verify**: every value it read must appear on the invoice, hours x rate must equal each line,
    the lines must add up to the total, and the consultant must match one work order. An invoice
    is settled here only if none of its results could come from a misread. An expired work order
-   or a duplicate is a fact, not a misread, so those settle too.
+   or a duplicate approval is a fact, not a misread, so those settle too.
 4. **Agent** (only for the rest): the agent reads the invoice Markdown and writes the printed values
    ([`prompts/EXTRACTION.md`](prompts/EXTRACTION.md)). Run one small, fast model per invoice, in parallel.
-   Scanned invoices are read from page images and always end as REVIEW.
+   Scanned invoices are read from page images and always end as REVIEW_REQUIRED.
 5. **Decide**: code only, against the database.
 
-| Check | Fails as |
+| Check | When it fails |
 | --- | --- |
-| hours x rate = line amount on every line | NO |
-| invoice total = sum of the hours lines (extra charges, discounts) | NO |
-| invoice period = timesheet month | NO |
-| a work order exists for the consultant | NO |
-| a work order covers the whole invoiced period (renewals supported) | NO |
-| billed rate = work order rate | NO |
-| billed hours = timesheet hours for the consultant's ATT ID (several lines for one person are added together) | NO |
-| invoice amount = timesheet hours x work order rate | NO |
-| same vendor + invoice number already approved (`--record`) | NO |
-| overtime in the timesheet, rate not hourly, the name matches two people | REVIEW |
+| hours x rate = line amount on every line | MISMATCH |
+| invoice **subtotal** = sum of the hours lines (extra charges or a missing line). Tax and adjustments on the payable total are a warning only | MISMATCH |
+| billed rate = rate of the work order in force | MISMATCH |
+| billed hours = timesheet hours for the consultant's ATT ID (several lines for one person are added together) | MISMATCH |
+| invoice amount = timesheet hours x work order rate | MISMATCH |
+| same vendor + invoice number already approved (`--record`) | MISMATCH |
+| a work order is in force for the whole billing period (expired or missing = can't confirm the rate) | REVIEW_REQUIRED |
+| the consultant is in the master timesheet, and matches exactly one person | REVIEW_REQUIRED |
+| the invoice period is the timesheet month being checked | REVIEW_REQUIRED |
+| overtime in the timesheet, rate not hourly, no rate on file, scanned or unverifiable values | REVIEW_REQUIRED |
 
-Warnings that don't change the answer: work order status not "Verified", work order record
-not yet confirmed by a person, weekdays with no recorded time.
+When both kinds of problem apply, MISMATCH wins: a wrong amount is reported even if the work
+order has also expired.
+
+Warnings, which don't change the verdict:
+- duplicate or missing timesheet days
+- tax or adjustments on the total
+- work order status not "Verified"
+- work order record not yet confirmed by a person
 
 ## Setup
 
@@ -82,7 +92,7 @@ python -m invoice_check $DB hours ab1234 --month 2026-10
 python -m invoice_check $DB expected ab1234 --month 2026-10
 ```
 
-`decide` exits 0 only when every invoice is GO, 1 when any is NO or REVIEW, and 2 on a data
+`decide` exits 0 only when every invoice is MATCH, 1 when any is MISMATCH or REVIEW_REQUIRED, and 2 on a data
 error such as a timesheet month that hasn't been loaded. `--record` saves the decisions, so an
 approved invoice can't be approved again.
 
@@ -103,7 +113,7 @@ git-ignored. Tests use invented data only:
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 55 tests, about 3 s
+python -m pytest            # 62 tests, about 3 s
 ```
 
 `vendor/pulkit/` is the extractor from Pulkit's invoice-reconciliation skill, copied unchanged

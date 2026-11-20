@@ -11,7 +11,7 @@ from .common import fmt_money, fmt_num
 from .timesheet import Timesheet
 from .verify import GO, NO, REVIEW, Decision
 
-ICON = {GO: "GO", NO: "NO", REVIEW: "REVIEW"}
+ICON = {GO: "MATCH", NO: "MISMATCH", REVIEW: "REVIEW_REQUIRED"}
 
 
 def markdown(decisions: list[Decision], ts: Timesheet, errors: list[str]) -> str:

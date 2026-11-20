@@ -166,3 +166,10 @@ def test_expected_lookup(loaded):
     ot = queries.expected(loaded, "ak003", "2026-10")
     assert "overtime" in ot["result"] and ot["expected_amount"] == Decimal(220) * 100
     assert queries.expected(loaded, "zz000", "2026-10")["result"] == "no work order"
+
+
+def test_duplicate_days_in_the_workbook_are_flagged(con, tmp_path):
+    dup = [2026, 10, "1", 1, None, None, "V1", "CompNova LLC", "s", 1, "Seg", "jl001", "JORDAN", "LEE", "N", 8, 0, 40, 0]
+    load(con, tmp_path, extra_rows=[dup])
+    c = timesheet.from_db(con, "2026-10").contractors["jl001"]
+    assert c.duplicate_days == {date(2026, 10, 1)} and c.total == Decimal(160)

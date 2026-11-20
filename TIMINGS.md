@@ -9,7 +9,8 @@ run of each command. Agent times are from the agent tool's own duration and vary
 
 8 invoices from 8 vendors (7 with a text layer, 1 scanned), 8 work orders, and an ATT Time
 Report with 133 contractors and 2,763 daily rows. Every approach reached the same payment
-decisions: 3 go ahead, 4 do not pay (work order expired), 1 needs a person (scanned).
+decisions: 3 MATCH (go ahead). The rest went to a person (REVIEW_REQUIRED under Pulkit's rules,
+which this branch now follows): 4 because their work orders had expired, 1 because it was a scan.
 
 | Approach | Rules (no AI) | Agent | Decide | Total | Invoices sent to an agent |
 | --- | --- | --- | --- | --- | --- |
@@ -40,12 +41,17 @@ step took 25 s. Called directly from a script with an API key, that step would b
 | `decide` | 0.37 s |
 | **Monthly run total (`fast` + `decide`)** | **3.3 s**, about 16 ms per invoice, 0 agent calls |
 
+After aligning the verdicts with Pulkit's skill (expired work order = REVIEW_REQUIRED, hours x
+rate compared with the subtotal), the October run gives exactly his skill's verdicts: 3 MATCH and
+5 REVIEW_REQUIRED. The timings are unchanged: rules 0.79 s, decide 0.31 s.
+
 ## Tests
 
-`python -m pytest` runs 55 tests in about 2.6 s, all on invented data:
+`python -m pytest` runs 62 tests in about 2.7 s, all on invented data:
 
-- 26 tests for the decision rules and document handling
-- 15 for the database, linking and lookups
+- 32 tests for the decision rules and document handling, including subtotal vs total, the
+  review policy and duplicate days
+- 16 for the database, linking and lookups
 - 14 for the combined pipeline, including end-to-end runs through the command line with real PDFs
 
 The tests were checked by mutation: each of four safety checks was disabled in turn, and the

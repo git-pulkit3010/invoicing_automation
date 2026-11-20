@@ -1,4 +1,14 @@
-"""Step 3: verify what the agent extracted and decide GO / NO / REVIEW.
+"""Step 3: verify what was extracted and decide MATCH / MISMATCH / REVIEW_REQUIRED.
+
+Verdicts and rules follow Pulkit's invoice-reconciliation skill:
+  * hours come from the master timesheet, never from the invoice;
+  * the rate comes from the work order in force during the billing period, and an expired
+    (or missing) work order is REVIEW_REQUIRED even when the amount agrees;
+  * hours x rate is compared with the invoice subtotal, so tax and adjustments on the
+    payable total don't create false mismatches;
+  * a missing rate, an ambiguous or unknown contractor, or an unreadable document is
+    REVIEW_REQUIRED, never a confident match or mismatch;
+  * duplicate or missing timesheet days are warnings, not verdicts.
 
 The agent only reads values off the invoice. Everything here is plain code:
 it confirms the agent's numbers really are on the invoice, then checks them
@@ -28,8 +38,9 @@ from .common import (fmt_money, fmt_num, name_tokens, numbers_in_text, parse_dat
 from .timesheet import Timesheet
 from .workorders import WorkOrder
 
-GO, NO, REVIEW = "GO", "NO", "REVIEW"
+GO, NO, REVIEW = "MATCH", "MISMATCH", "REVIEW_REQUIRED"
 MESSAGES = {GO: "Go ahead with payment", NO: "Do not pay", REVIEW: "Needs a person to check"}
+APPROVED = (GO, "GO")                                   # "GO" = records saved by earlier versions
 
 
 @dataclass
@@ -53,6 +64,7 @@ class Decision:
     invoice_number: str = ""
     period: str = ""
     total: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
     source: str = "text"
     decision: str = REVIEW
     untrusted: list[str] = field(default_factory=list)   # extraction problems -> REVIEW
@@ -98,6 +110,7 @@ def _check_extraction(ext: dict, md_text: str, has_text: bool, d: Decision) -> l
 
     total = to_decimal(ext.get("total"))
     d.total = total
+    d.subtotal = to_decimal(ext.get("subtotal"))
     if not has_text:
         d.source = "image"
         d.untrusted.append("scanned invoice (no text layer): values were read from an image, so a person "
@@ -113,6 +126,8 @@ def _check_extraction(ext: dict, md_text: str, has_text: bool, d: Decision) -> l
                 d.untrusted.append(f"line {i}: {k} {fmt_num(v)} does not appear on the invoice")
     if total is not None and total.normalize() not in on_invoice:
         d.untrusted.append(f"total {fmt_money(total)} does not appear on the invoice")
+    if d.subtotal is not None and d.subtotal.normalize() not in on_invoice:
+        d.untrusted.append(f"subtotal {fmt_money(d.subtotal)} does not appear on the invoice")
     inv_no = str(ext.get("invoice_number") or "").strip()
     if inv_no and inv_no.replace(" ", "") not in md_text.replace(" ", "").replace("\\", ""):
         d.untrusted.append(f"invoice number '{inv_no}' does not appear on the invoice")
@@ -154,17 +169,22 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
                               f"{fmt_money(ln['hours'] * ln['rate'])}, but the line says {fmt_money(ln['amount'])}")
             d.misread_risk.append(d.failures[-1])
     amounts = [ln["amount"] for ln in lines if ln["amount"] is not None]
-    if d.total is not None and amounts and not same_money(sum(amounts), d.total):
-        d.failures.append(f"invoice total {fmt_money(d.total)} does not equal the sum of its hours lines "
-                          f"{fmt_money(sum(amounts))} (difference {fmt_money(d.total - sum(amounts))}: "
+    billed = d.subtotal if d.subtotal is not None else d.total     # hours x rate is compared with this
+    label = "subtotal" if d.subtotal is not None else "total (no separate subtotal printed)"
+    if billed is not None and amounts and not same_money(sum(amounts), billed):
+        d.failures.append(f"invoice {label} {fmt_money(billed)} does not equal the sum of its hours lines "
+                          f"{fmt_money(sum(amounts))} (difference {fmt_money(billed - sum(amounts))}: "
                           f"extra charges, discounts or a missing line)")
         d.misread_risk.append(d.failures[-1])
+    if d.subtotal is not None and d.total is not None and not same_money(d.subtotal, d.total):
+        d.warnings.append(f"payable total {fmt_money(d.total)} differs from the subtotal {fmt_money(d.subtotal)} "
+                          f"by {fmt_money(d.total - d.subtotal)} (tax or adjustments; not part of the hours check)")
 
     # --- period -------------------------------------------------------------
     if p_start and p_end and (p_start, p_end) != (ts.period_start, ts.period_end):
-        d.failures.append(f"invoice period {p_start} to {p_end} is not the timesheet month "
-                          f"{ts.period_start} to {ts.period_end}")
-        d.misread_risk.append(d.failures[-1])
+        d.reviews.append(f"invoice period {p_start} to {p_end} is not the timesheet month checked "
+                         f"({ts.period_start} to {ts.period_end}); check it against that month's timesheet")
+        d.misread_risk.append(d.reviews[-1])
 
     # --- per consultant (several lines for one person are added together) ----
     groups: dict[str, list[dict]] = {}
@@ -189,8 +209,8 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
             d.misread_risk.append(problem)
             continue
         if not wos:
-            d.failures.append(f"no work order on record for {name}")
-            d.misread_risk.append(d.failures[-1])
+            d.reviews.append(f"no work order on record for {name}, so the rate cannot be confirmed against a contract")
+            d.misread_risk.append(d.reviews[-1])
             continue
         r.attuid = wos[0].attuid
         if wos[0].vendor and d.vendor and not vendors_agree(wos[0].vendor, d.vendor):
@@ -205,7 +225,8 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
                 latest = max(wos, key=lambda w: w.end or date.min)
                 when = (f"expired on {latest.end}" if latest.end and latest.end < p_end
                         else f"runs {latest.start} to {latest.end}")
-                d.failures.append(f"work order for {name} {when}; it does not cover {p_start} to {p_end}")
+                d.reviews.append(f"work order for {name} {when}; no work order is in force for {p_start} to "
+                                 f"{p_end}, so the billed rate cannot be confirmed against a contract")
         wo = wo or max(wos, key=lambda w: w.end or date.min)
         r.work_order, r.wo_rate = wo.source_file, wo.rate
         r.wo_valid = f"{wo.start} to {wo.end}"
@@ -233,8 +254,13 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
             d.reviews.append(f"{name} is not linked to an ATT ID in the work order database")
             continue
         tc = ts.contractors.get(wo.attuid)
-        if tc is None or tc.total == 0:
-            d.failures.append(f"no hours recorded in the timesheet for {name} ({wo.attuid})")
+        if tc is None:
+            d.reviews.append(f"{name} ({wo.attuid}) is not in the master timesheet, so the billed hours "
+                             f"cannot be verified")
+            continue
+        if tc.total == 0:
+            d.failures.append(f"no hours recorded in the timesheet for {name} ({wo.attuid}) in this period")
+            d.misread_risk.append(d.failures[-1])
             continue
         r.timesheet_hours = tc.total
         if tc.ot > 0:
@@ -250,6 +276,9 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
                                   f"work order rate = {fmt_num(tc.total)} x {fmt_money(wo.rate)} = "
                                   f"{fmt_money(r.expected_amount)}")
                 d.misread_risk.append(d.failures[-1])
+        if tc.duplicate_days:
+            d.warnings.append(f"{name} has more than one timesheet row on {len(tc.duplicate_days)} day(s): "
+                              + ", ".join(x.strftime("%d %b") for x in sorted(tc.duplicate_days)))
         missing = ts.missing_weekdays(wo.attuid)
         if missing:
             d.warnings.append(f"{name} has no time recorded on {len(missing)} weekday(s): "
@@ -259,8 +288,8 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
     if con is not None and d.invoice_number:
         prev = con.execute(
             "SELECT decided_at, file_sha256 FROM processed_invoices WHERE vendor_key=? AND invoice_number=? "
-            "AND decision='GO' ORDER BY decided_at DESC LIMIT 1",
-            (vendor_key(d.vendor), d.invoice_number)).fetchone()
+            "AND decision IN (?, ?) ORDER BY decided_at DESC LIMIT 1",
+            (vendor_key(d.vendor), d.invoice_number, *APPROVED)).fetchone()
         if prev:
             same = " (same file)" if prev["file_sha256"] == file_sha else " (different file)"
             d.failures.append(f"invoice {d.invoice_number} from {d.vendor} was already approved for payment on "

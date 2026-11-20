@@ -23,6 +23,7 @@ Write `<invoice file name without .pdf>.json` into the `extracted/` folder:
   "lines": [
     {"consultant": "Jordan Lee", "hours": "152", "rate": "90.00", "amount": "13680.00"}
   ],
+  "subtotal": "13680.00",
   "total": "13680.00",
   "notes": ""
 }
@@ -36,10 +37,13 @@ Write `<invoice file name without .pdf>.json` into the `extracted/` folder:
 2. **One entry in `lines` per billed line** for a person's time. If the invoice
    splits a person's month over several lines, list each line. Do not merge them.
 3. **`total` is the amount payable** (Total, Grand Total, Invoice Total, Balance
-   Due), not a subtotal, when they differ.
+   Due). **`subtotal`** is the amount before tax or adjustments, if one is printed
+   separately (Subtotal, Sub Total, Gross Total); otherwise `null`. The hours check
+   uses the subtotal, so tax on the total doesn't cause a mismatch.
 4. **Other charges are not hours lines.** Expenses, fees, tax and discounts are not
-   entries in `lines`; mention them in `notes`. The checker compares `total` with
-   the sum of `lines` and flags the difference.
+   entries in `lines`; mention them in `notes`. The checker compares the subtotal
+   (or the total, if there is no subtotal) with the sum of `lines` and flags the
+   difference.
 5. **Ignore attached timesheets.** Pages after the invoice (daily hours tables,
    week grids) are supporting documents, not billed lines.
 6. **Column order varies.** Use the column headers (Qty / Quantity / Hours,

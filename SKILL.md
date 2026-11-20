@@ -1,6 +1,6 @@
 ---
 name: invoice-payment-check
-description: Check a month's vendor invoices against the ATT timesheet and work orders, and say for each one whether to go ahead with payment, not pay (with reasons), or send it to a person. Use when given new vendor invoices to verify before payment, or asked about a consultant's hours, rate or work order.
+description: Check a month's vendor invoices against the ATT timesheet and work orders, and give each one a verdict (MATCH = go ahead with payment, MISMATCH = do not pay, with reasons, REVIEW_REQUIRED = a person must check it). Use when given new vendor invoices to verify before payment, or asked about a consultant's hours, rate or work order.
 ---
 
 # Invoice payment check
@@ -56,8 +56,11 @@ right outcome.
 ## 4. Report
 
 Send `W/report.md`, which also comes as .csv and .json. Reply in a few lines:
-- how many invoices are GO, NO and REVIEW, with amounts
-- each NO and REVIEW reason, as the report writes it
+- how many invoices are MATCH, MISMATCH and REVIEW_REQUIRED, with amounts
+- each MISMATCH and REVIEW_REQUIRED reason, as the report writes it
+
+For REVIEW_REQUIRED, say what a person has to supply, for example a renewed work order
+covering the period or a readable copy of a scanned invoice. Don't guess the outcome.
 
 ## Questions about people, hours and rates
 

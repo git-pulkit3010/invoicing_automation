@@ -114,7 +114,7 @@ def to_extraction(raw: dict, pdf_name: str, con: sqlite3.Connection) -> dict:
         "file": pdf_name, "vendor": vendor, "invoice_number": v["invoice_number"],
         "invoice_date": v["invoice_date"], "period_start": period[0], "period_end": period[1],
         "currency": _value(raw.get("currency")) or "USD", "lines": lines,
-        "total": total,
+        "total": total, "subtotal": _money(v["subtotal"]),
         "notes": " | ".join(notes), "source": "prefill",
     }
 

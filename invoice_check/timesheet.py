@@ -45,6 +45,7 @@ class ContractorTime:
     regular: Decimal = Decimal(0)
     ot: Decimal = Decimal(0)
     days: set = field(default_factory=set)          # dates with recorded time
+    duplicate_days: set = field(default_factory=set)  # dates with more than one row (a warning)
     excluded_rows: int = 0                          # rows outside the report period
 
     @property
@@ -148,6 +149,8 @@ def _build(path: Path, start: date, end: date, rows) -> Timesheet:
             continue
         c.regular += r.regular
         c.ot += r.ot
+        if r.day in c.days:
+            c.duplicate_days.add(r.day)
         c.days.add(r.day)
     return Timesheet(path, start, end, people)
 

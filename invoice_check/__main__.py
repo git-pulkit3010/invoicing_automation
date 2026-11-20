@@ -188,7 +188,7 @@ def cmd_fast(a, con) -> int:
             queue[name] = reasons
         else:
             (ext_dir / (Path(name).stem + ".json")).write_text(json.dumps(ext, indent=2), encoding="utf-8")
-            print(f"tier1  {d.decision:6} {name}")
+            print(f"tier1  {d.decision:15} {name}")
     for name, why in queue.items():
         print(f"AGENT  {name}  ({why[0]}{' +' + str(len(why) - 1) + ' more' if len(why) > 1 else ''})")
     (a.work / "agent_queue.json").write_text(json.dumps(
@@ -236,7 +236,7 @@ def cmd_decide(a, con) -> int:
     for d in decisions:
         more = f" +{len(d.reasons) - 1} more" if len(d.reasons) > 1 else ""
         reason = f"  ({d.reasons[0]}{more})" if d.reasons else ""
-        print(f"{d.decision:6} {d.vendor[:28]:28} {d.invoice_number:16} {fmt_money(d.total):>12}{reason}")
+        print(f"{d.decision:15} {d.vendor[:28]:28} {d.invoice_number:16} {fmt_money(d.total):>12}{reason}")
     for e in errors:
         print(f"ERROR  {e}")
     print(f"\nReport: {a.work / 'report.md'} (+ .csv, .json)")

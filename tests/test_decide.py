@@ -83,10 +83,16 @@ def test_scanned_invoice_is_always_review():
     assert d.decision == REVIEW
 
 
-def test_expired_work_order_is_no():
+def test_expired_work_order_needs_review_even_when_amount_agrees():
     orders = [wo(1, "as001", "Alice Smith", "Acme LLC", "100", end=date(2026, 3, 31))]
     d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"), orders=orders)
-    assert d.decision == NO and "expired on 2026-03-31" in d.reasons[0]
+    assert d.decision == REVIEW and "expired on 2026-03-31" in d.reasons[0]
+
+
+def test_expired_work_order_with_wrong_hours_is_a_mismatch():
+    orders = [wo(1, "as001", "Alice Smith", "Acme LLC", "100", end=date(2026, 3, 31))]
+    d = run(inv([("Alice Smith", "168", "100.00", "16800.00")], "16800.00"), orders=orders)
+    assert d.decision == NO and any("timesheet shows 160" in r for r in d.reasons)
 
 
 def test_renewed_work_order_is_used():
@@ -111,15 +117,47 @@ def test_bad_line_arithmetic_is_no():
     assert d.decision == NO and any("but the line says" in r for r in d.reasons)
 
 
-def test_wrong_period_is_no():
+def test_other_month_needs_review():
     d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00", period=("2026-10-01", "2026-10-31")))
-    assert d.decision == NO and any("not the timesheet month" in r for r in d.reasons)
+    assert d.decision == REVIEW and any("not the timesheet month" in r for r in d.reasons)
 
 
-def test_no_work_order_is_no():
+def test_no_work_order_needs_review():
     d = run(inv([("Bob Jones", "160", "100.00", "16000.00")], "16000.00"),
             timesheet=ts(as001=("ALICE SMITH", 160), bj002=("BOB JONES", 160)))
-    assert d.decision == NO and "no work order on record for Bob Jones" in d.reasons
+    assert d.decision == REVIEW and "no work order on record for Bob Jones" in d.reasons[0]
+
+
+def test_consultant_not_in_timesheet_needs_review():
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"), timesheet=ts(zz9=("ZOE PARK", 160)))
+    assert d.decision == REVIEW and "not in the master timesheet" in d.reasons[0]
+
+
+def test_consultant_with_zero_hours_is_a_mismatch():
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"), timesheet=ts(as001=("ALICE SMITH", 0)))
+    assert d.decision == NO and "no hours recorded" in d.reasons[0]
+
+
+def test_tax_on_the_total_is_compared_via_the_subtotal():
+    ext = inv([("Alice Smith", "160", "100.00", "16000.00")], "17280.00")
+    ext["subtotal"] = "16000.00"
+    d = run(ext, md=md_for(ext) + "\nSubtotal $16,000.00\nSales tax 8% $1,280.00\n")
+    assert d.decision == GO, d.reasons
+    assert any("differs from the subtotal" in w for w in d.warnings)
+
+
+def test_fee_inside_the_subtotal_is_a_mismatch():
+    ext = inv([("Alice Smith", "160", "100.00", "16000.00")], "18500.00")
+    ext["subtotal"] = "18500.00"
+    d = run(ext, md=md_for(ext) + "\nAdministration fee $2,500.00\nSubtotal $18,500.00\n")
+    assert d.decision == NO and any("invoice subtotal 18,500.00 does not equal" in r for r in d.reasons)
+
+
+def test_duplicate_timesheet_days_are_a_warning():
+    sheet = ts(as001=("ALICE SMITH", 160))
+    sheet.contractors["as001"].duplicate_days = {date(2026, 11, 3)}
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"), timesheet=sheet)
+    assert d.decision == GO and any("more than one timesheet row" in w for w in d.warnings)
 
 
 def test_same_name_resolved_by_vendor():
@@ -217,4 +255,5 @@ def test_report_handles_a_batch_with_no_go(tmp_path):
     from invoice_check.report import markdown
     d = run(inv([("Alice Smith", "168", "100.00", "16800.00")], "16800.00"))
     assert d.decision == NO
-    assert "| Go ahead with payment | 0 | 0.00 |" in markdown([d], ALICE_TS, [])
+    out = markdown([d], ALICE_TS, [])
+    assert "| Go ahead with payment | 0 | 0.00 |" in out and "**MISMATCH**" in out

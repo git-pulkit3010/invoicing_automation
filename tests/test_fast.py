@@ -61,14 +61,15 @@ def decisions(work: Path) -> dict:
     return {d["file"]: d for d in json.loads((work / "report.json").read_text())}
 
 
-def agent_writes(work: Path, pdf: str, vendor: str, number: str, lines: list[tuple], total: str):
+def agent_writes(work: Path, pdf: str, vendor: str, number: str, lines: list[tuple], total: str,
+                 subtotal: str | None = None):
     """Stand-in for the agent: writes the extraction a careful reader would produce."""
     (work / "extracted").mkdir(exist_ok=True)
     (work / "extracted" / (Path(pdf).stem + ".json")).write_text(json.dumps({
         "file": pdf, "vendor": vendor, "invoice_number": number, "invoice_date": "2026-11-05",
         "period_start": "2026-10-01", "period_end": "2026-10-31", "currency": "USD",
         "lines": [dict(consultant=c, hours=h, rate=r, amount=a) for c, h, r, a in lines],
-        "total": total, "notes": ""}))
+        "total": total, "subtotal": subtotal, "notes": ""}))
 
 
 # ===================================================================== end to end
@@ -81,7 +82,7 @@ def test_clean_batch_is_settled_by_rules_alone(setup):
     assert run("--db", db, "fast", inv, "--work", work, "--month", "2026-10") == 0
     assert queue_of(work) == {}                                      # no agent needed at all
     assert run("--db", db, "decide", "--work", work, "--month", "2026-10") == 0   # exit 0: all GO
-    assert {d["decision"] for d in decisions(work).values()} == {"GO"}
+    assert {d["decision"] for d in decisions(work).values()} == {"MATCH"}
 
 
 def test_mixed_batch_routes_each_invoice_correctly(setup):
@@ -132,16 +133,17 @@ def test_mixed_batch_routes_each_invoice_correctly(setup):
 
     assert run("--db", db, "decide", "--work", work, "--month", "2026-10") == 1
     d = decisions(work)
-    assert d[files["go"]]["decision"] == "GO"
-    assert d[files["swapped"]]["decision"] == "GO"                    # column order doesn't matter
-    assert d[files["expired"]]["decision"] == "NO"
+    assert d[files["go"]]["decision"] == "MATCH"
+    assert d[files["swapped"]]["decision"] == "MATCH"                    # column order doesn't matter
+    assert d[files["expired"]]["decision"] == "REVIEW_REQUIRED"
     assert any("expired on 2026-03-31" in r for r in d[files["expired"]]["reasons"])
-    assert d[files["fee"]]["decision"] == "NO"
+    assert d[files["fee"]]["decision"] == "MISMATCH"
     assert any("sum of its hours lines" in r for r in d[files["fee"]]["reasons"])
-    assert d[files["hours"]]["decision"] == "NO"
+    assert d[files["fee"]]["warnings"] == [] or all("subtotal" not in w for w in d[files["fee"]]["warnings"])
+    assert d[files["hours"]]["decision"] == "MISMATCH"
     assert any("timesheet shows 160" in r for r in d[files["hours"]]["reasons"])
-    assert d[files["no_wo"]]["decision"] == "NO"
-    assert d[files["scan"]]["decision"] == "REVIEW"
+    assert d[files["no_wo"]]["decision"] == "REVIEW_REQUIRED"
+    assert d[files["scan"]]["decision"] == "REVIEW_REQUIRED"
 
 
 def test_report_is_identical_on_rerun(setup):
@@ -164,7 +166,7 @@ def test_recorded_approval_blocks_a_second_payment(setup):
     assert run("--db", db, "decide", "--work", work, "--month", "2026-10", "--record") == 0
     assert run("--db", db, "decide", "--work", work, "--month", "2026-10") == 1
     d = next(iter(decisions(work).values()))
-    assert d["decision"] == "NO" and "already approved" in d["reasons"][0]
+    assert d["decision"] == "MISMATCH" and "already approved" in d["reasons"][0]
 
 
 def test_decide_without_the_month_loaded_is_a_clear_error(setup, capsys):
