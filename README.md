@@ -39,7 +39,18 @@ invoice PDFs ─► 1 convert ─► 2 rules read ─► 3 verify ────�
 4. **Agent** (only for the rest): the agent reads the invoice Markdown and writes the printed values
    ([`prompts/EXTRACTION.md`](prompts/EXTRACTION.md)). Run one small, fast model per invoice, in parallel.
    Scanned invoices are read from page images and always end as REVIEW_REQUIRED.
-5. **Decide**: code only, against the database.
+5. **Decide**: code only, against the database. Every invoice gets a verdict and a short message:
+   - "Yes, pay $13,680.00: 152 hrs x $90.00 = $13,680.00, matches the timesheet and work order."
+   - "No: Jordan Lee: invoice bills 168 hrs, timesheet shows 160 hrs (difference 8) (+1 more)"
+   - "No, needs review: work order for Maya Rao expired on 2026-03-31"
+
+   The results go to a new Excel file on every run (`report.xlsx`, or the path given with `--xlsx`):
+   - **Results:** one row per invoice line, with verdict, Pay? (Yes/No), message and the cross-checked
+     figures. Expected amount and Difference are Excel formulas.
+   - **Summary:** counts and amounts per verdict.
+   - **Notes:** where each column's figures come from.
+
+   The same results are also written as Markdown, CSV and JSON.
 
 | Check | When it fails |
 | --- | --- |
@@ -84,7 +95,7 @@ python -m invoice_check $DB wo-set 4 --attuid ab1234    # link by hand (e.g. two
 # monthly run
 python -m invoice_check $DB fast data/invoices --work work/2026-10 --month 2026-10
 #   agent: for each entry in work/2026-10/agent_queue.json, write work/2026-10/extracted/<name>.json
-python -m invoice_check $DB decide --work work/2026-10 --month 2026-10 [--record]
+python -m invoice_check $DB decide --work work/2026-10 --month 2026-10 [--record] [--xlsx results/2026-10.xlsx]
 
 # lookups (add --json for machine-readable output)
 python -m invoice_check $DB who "Name On Invoice" --vendor "Vendor"
@@ -113,7 +124,7 @@ git-ignored. Tests use invented data only:
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 62 tests, about 3 s
+python -m pytest            # 68 tests, about 4 s
 ```
 
 `vendor/pulkit/` is the extractor from Pulkit's invoice-reconciliation skill, copied unchanged

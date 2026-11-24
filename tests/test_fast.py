@@ -264,3 +264,34 @@ def test_currency_codes_and_missing_vendor_are_mapped(one_invoice, monkeypatch):
     ext = json.loads((work / "extracted" / (Path(GOOD).stem + ".json")).read_text())
     assert (ext["total"], ext["vendor"]) == ("13680.00", "Northwind Systems")
     assert "vendor taken from the file name" in ext["notes"]
+
+
+def test_decide_writes_a_fresh_excel_with_messages_and_formulas(setup):
+    from openpyxl import load_workbook
+    db, inv, work = setup
+    make_invoice(inv / "Northwind Systems_Jordan Lee_1001-103126.pdf", "Northwind Systems LLC", "NW-4417",
+                 [("Jordan Lee", "152", "90.00", "$13,680.00")], "$13,680.00")
+    make_invoice(inv / "Bluepeak_Maya Rao_1001-103126.pdf", "Bluepeak Inc", "BP-77",
+                 [("Maya Rao", "136", "85.00", "$11,560.00")], "$11,560.00")
+    run("--db", db, "fast", inv, "--work", work, "--month", "2026-10")
+    out = work / "results" / "october.xlsx"
+    run("--db", db, "decide", "--work", work, "--month", "2026-10", "--xlsx", out)
+    wb = load_workbook(out)
+    ws = wb["Results"]
+    hdr = [c.value for c in ws[1]]
+    rows = {r[hdr.index("Invoice #")]: dict(zip(hdr, r)) for r in ws.iter_rows(min_row=2, values_only=True)}
+    assert set(rows) == {"NW-4417", "BP-77"}
+    go, held = rows["NW-4417"], rows["BP-77"]
+    assert (go["Verdict"], go["Pay?"]) == ("MATCH", "Yes")
+    assert go["Message"] == "Yes, pay $13,680.00: 152 hrs x $90.00 = $13,680.00, matches the timesheet and work order."
+    assert (held["Verdict"], held["Pay?"]) == ("REVIEW_REQUIRED", "No")
+    assert held["Message"] == "No, needs review: work order for Maya Rao expired on 2026-03-31"
+    assert (go["Timesheet hours"], go["Work order rate ($/hr)"], go["Invoice amount ($)"]) == (152, 90, 13680)
+    assert go["Expected amount ($)"].startswith("=IF(AND(ISNUMBER(") and "*" in go["Expected amount ($)"]
+    assert go["Difference ($)"].startswith("=IF(AND(ISNUMBER(")
+    assert {"Summary", "Notes"} <= set(wb.sheetnames)
+    assert wb["Summary"]["C8"].value.startswith("=SUMIFS(")        # MATCH invoice count is a formula
+    assert all(c.font.name == "Arial" for c in ws[1])
+    # a second run replaces the file rather than appending to it
+    run("--db", db, "decide", "--work", work, "--month", "2026-10", "--xlsx", out)
+    assert load_workbook(out)["Results"].max_row == 3

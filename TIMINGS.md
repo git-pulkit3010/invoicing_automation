@@ -47,12 +47,16 @@ rate compared with the subtotal), the October run gives exactly his skill's verd
 
 ## Tests
 
-`python -m pytest` runs 62 tests in about 2.7 s, all on invented data:
+`python -m pytest` runs 68 tests in about 4 s, all on invented data:
 
-- 32 tests for the decision rules and document handling, including subtotal vs total, the
-  review policy and duplicate days
+- 37 tests for the decision rules, messages and document handling, including subtotal vs total,
+  the review policy and duplicate days
 - 16 for the database, linking and lookups
-- 14 for the combined pipeline, including end-to-end runs through the command line with real PDFs
+- 15 for the combined pipeline, including end-to-end runs through the command line with real PDFs
+  and the Excel output
+
+Writing the Excel results adds about 0.1 s to `decide`. The October workbook recalculates in
+LibreOffice with 24 formulas and 0 errors.
 
 The tests were checked by mutation: each of four safety checks was disabled in turn, and the
 suite failed every time (2 or 3 tests each). The four checks:

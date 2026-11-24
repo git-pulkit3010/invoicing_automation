@@ -257,3 +257,43 @@ def test_report_handles_a_batch_with_no_go(tmp_path):
     assert d.decision == NO
     out = markdown([d], ALICE_TS, [])
     assert "| Go ahead with payment | 0 | 0.00 |" in out and "**MISMATCH**" in out
+
+
+# ------------------------------------------------------------------ messages --
+def test_yes_message_states_the_amount_cross_checked():
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"))
+    assert d.pay == "Yes"
+    assert d.summary == ("Yes, pay $16,000.00: 160 hrs x $100.00 = $16,000.00, "
+                         "matches the timesheet and work order.")
+
+
+def test_yes_message_mentions_tax_on_the_total():
+    ext = inv([("Alice Smith", "160", "100.00", "16000.00")], "17280.00")
+    ext["subtotal"] = "16000.00"
+    d = run(ext, md=md_for(ext) + "\nSubtotal $16,000.00\n")
+    assert d.summary.startswith("Yes, pay $17,280.00: 160 hrs x $100.00 = $16,000.00")
+    assert "plus $1,280.00 tax/adjustments" in d.summary
+
+
+def test_no_message_gives_the_reason_briefly():
+    d = run(inv([("Alice Smith", "168", "100.00", "16800.00")], "16800.00"))
+    assert d.pay == "No"
+    assert d.summary.startswith("No: Alice Smith: invoice bills 168 hrs, timesheet shows 160 hrs")
+    assert d.summary.endswith("(+1 more)")              # the amount check fails too
+
+
+def test_review_message_is_short_and_detail_is_kept():
+    orders = [wo(1, "as001", "Alice Smith", "Acme LLC", "100", end=date(2026, 3, 31))]
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00")], "16000.00"), orders=orders)
+    assert d.pay == "No"
+    assert d.summary == "No, needs review: work order for Alice Smith expired on 2026-03-31"
+    assert "get a renewed work order" in d.reasons[0]
+
+
+def test_two_consultants_on_one_invoice():
+    sheet = ts(as001=("ALICE SMITH", 160), bj002=("BOB JONES", 80))
+    orders = ALICE_WO + [wo(2, "bj002", "Bob Jones", "Acme LLC", "90")]
+    d = run(inv([("Alice Smith", "160", "100.00", "16000.00"), ("Bob Jones", "80", "90.00", "7200.00")], "23200.00"),
+            timesheet=sheet, orders=orders)
+    assert d.summary == ("Yes, pay $23,200.00: 2 consultants, $16,000.00 + $7,200.00, "
+                         "all match the timesheet and work orders.")

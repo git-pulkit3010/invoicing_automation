@@ -79,6 +79,33 @@ class Decision:
         return MESSAGES[self.decision]
 
     @property
+    def pay(self) -> str:
+        return "Yes" if self.decision == GO else "No"
+
+    @property
+    def summary(self) -> str:
+        """One short line: what was cross-checked (yes) or why not (no)."""
+        if self.decision == GO:
+            people = [c for c in self.consultants if c.expected_amount is not None]
+            payable = self.total if self.total is not None else sum((c.invoice_amount for c in people), Decimal(0))
+            if len(people) == 1:
+                c = people[0]
+                check = (f"{fmt_num(c.timesheet_hours)} hrs x ${fmt_money(c.wo_rate)} = "
+                         f"${fmt_money(c.expected_amount)}, matches the timesheet and work order")
+            else:
+                check = (f"{len(people)} consultants, " + " + ".join("$" + fmt_money(c.expected_amount) for c in people)
+                         + ", all match the timesheet and work orders")
+            extra = ""
+            if self.subtotal is not None and self.total is not None and not same_money(self.subtotal, self.total):
+                extra = f" (plus ${fmt_money(self.total - self.subtotal)} tax/adjustments on the total)"
+            return f"Yes, pay ${fmt_money(payable)}: {check}{extra}."
+        reasons = self.reasons
+        first = reasons[0].split("; ")[0] if reasons else "no reason recorded"     # detail stays in reasons
+        more = f" (+{len(reasons) - 1} more)" if len(reasons) > 1 else ""
+        prefix = "No: " if self.decision == NO else "No, needs review: "
+        return prefix + first + more
+
+    @property
     def reasons(self) -> list[str]:
         if self.decision == REVIEW:
             return self.untrusted or self.reviews
@@ -113,8 +140,8 @@ def _check_extraction(ext: dict, md_text: str, has_text: bool, d: Decision) -> l
     d.subtotal = to_decimal(ext.get("subtotal"))
     if not has_text:
         d.source = "image"
-        d.untrusted.append("scanned invoice (no text layer): values were read from an image, so a person "
-                           "must confirm them before payment")
+        d.untrusted.append("scanned invoice, read from an image; a person must confirm the values "
+                           "before payment")
         return lines
 
     # every number the agent reports must literally appear on the invoice
@@ -209,7 +236,7 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
             d.misread_risk.append(problem)
             continue
         if not wos:
-            d.reviews.append(f"no work order on record for {name}, so the rate cannot be confirmed against a contract")
+            d.reviews.append(f"no work order on record for {name}; the rate cannot be confirmed against a contract")
             d.misread_risk.append(d.reviews[-1])
             continue
         r.attuid = wos[0].attuid
@@ -226,7 +253,7 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
                 when = (f"expired on {latest.end}" if latest.end and latest.end < p_end
                         else f"runs {latest.start} to {latest.end}")
                 d.reviews.append(f"work order for {name} {when}; no work order is in force for {p_start} to "
-                                 f"{p_end}, so the billed rate cannot be confirmed against a contract")
+                                 f"{p_end}, so get a renewed work order before paying")
         wo = wo or max(wos, key=lambda w: w.end or date.min)
         r.work_order, r.wo_rate = wo.source_file, wo.rate
         r.wo_valid = f"{wo.start} to {wo.end}"
@@ -255,7 +282,7 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
             continue
         tc = ts.contractors.get(wo.attuid)
         if tc is None:
-            d.reviews.append(f"{name} ({wo.attuid}) is not in the master timesheet, so the billed hours "
+            d.reviews.append(f"{name} ({wo.attuid}) is not in the master timesheet; the billed hours "
                              f"cannot be verified")
             continue
         if tc.total == 0:

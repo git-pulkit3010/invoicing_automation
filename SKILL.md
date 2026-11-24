@@ -55,9 +55,10 @@ right outcome.
 
 ## 4. Report
 
-Send `W/report.md`, which also comes as .csv and .json. Reply in a few lines:
+Send `W/report.xlsx` (Results, Summary and Notes sheets; each invoice has Pay? Yes/No and a
+short message) and `W/report.md`. Reply in a few lines:
 - how many invoices are MATCH, MISMATCH and REVIEW_REQUIRED, with amounts
-- each MISMATCH and REVIEW_REQUIRED reason, as the report writes it
+- each invoice's message, as the report writes it
 
 For REVIEW_REQUIRED, say what a person has to supply, for example a renewed work order
 covering the period or a readable copy of a scanned invoice. Don't guess the outcome.

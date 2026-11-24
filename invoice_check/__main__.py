@@ -232,14 +232,14 @@ def cmd_decide(a, con) -> int:
     (a.work / "report.md").write_text(report.markdown(decisions, ts, errors), encoding="utf-8")
     (a.work / "report.csv").write_text(report.to_csv(decisions), encoding="utf-8")
     (a.work / "report.json").write_text(report.to_json(decisions), encoding="utf-8")
+    xlsx = a.xlsx or (a.work / "report.xlsx")
+    report.to_xlsx(decisions, ts, errors, xlsx)
 
     for d in decisions:
-        more = f" +{len(d.reasons) - 1} more" if len(d.reasons) > 1 else ""
-        reason = f"  ({d.reasons[0]}{more})" if d.reasons else ""
-        print(f"{d.decision:15} {d.vendor[:28]:28} {d.invoice_number:16} {fmt_money(d.total):>12}{reason}")
+        print(f"{d.decision:15} {d.vendor[:28]:28} {d.invoice_number:16} {fmt_money(d.total):>12}  {d.summary}")
     for e in errors:
         print(f"ERROR  {e}")
-    print(f"\nReport: {a.work / 'report.md'} (+ .csv, .json)")
+    print(f"\nReport: {a.work / 'report.md'} (+ .csv, .json)\nExcel:  {xlsx}")
     return 0 if decisions and not errors and all(d.decision == GO for d in decisions) else 1
 
 
@@ -276,6 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("decide", cmd_decide); s.add_argument("--work", type=Path, required=True)
     s.add_argument("--month", required=True, help="timesheet month to check against, YYYY-MM")
     s.add_argument("--record", action="store_true", help="save decisions (enables the duplicate-approval check)")
+    s.add_argument("--xlsx", type=Path, help="where to write the Excel results (default WORK/report.xlsx)")
     return p
 
 
