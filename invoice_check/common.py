@@ -107,3 +107,9 @@ def first(items: Iterable, default=None):
     for x in items:
         return x
     return default
+
+
+def tidy_name(name: str) -> str:
+    """'JORDAN lee SMITH' -> 'Jordan Lee Smith'; mixed-case words ('McDonald') are left alone."""
+    return " ".join(w.capitalize() if (w.isupper() or w.islower()) and w.isalpha() else w
+                    for w in (name or "").split())

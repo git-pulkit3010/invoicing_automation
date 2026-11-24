@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Optional
 
 from .common import (fmt_money, fmt_num, name_tokens, numbers_in_text, parse_date, same_money,
-                     to_decimal, vendor_key, vendors_agree)
+                     tidy_name, to_decimal, vendor_key, vendors_agree)
 from .timesheet import Timesheet
 from .workorders import WorkOrder
 
@@ -45,7 +45,8 @@ APPROVED = (GO, "GO")                                   # "GO" = records saved b
 
 @dataclass
 class ConsultantResult:
-    name: str
+    name: str                      # shown in reports: the work order's name once matched
+    invoice_name: str = ""         # exactly as printed on the invoice
     attuid: Optional[str] = None
     work_order: Optional[str] = None
     invoice_hours: Optional[Decimal] = None
@@ -221,7 +222,7 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
 
     for key, glines in groups.items():
         name = glines[0]["consultant"] or "?"
-        r = ConsultantResult(name=name)
+        r = ConsultantResult(name=name, invoice_name=name)
         d.consultants.append(r)
         if any(ln[k] is None for ln in glines for k in ("hours", "rate", "amount")):
             continue
@@ -240,6 +241,7 @@ def decide(ext: dict, md_text: str, has_text: bool, file_sha: str, ts: Timesheet
             d.misread_risk.append(d.reviews[-1])
             continue
         r.attuid = wos[0].attuid
+        name = r.name = tidy_name(wos[0].consultant_name)          # one consistent name in every message
         if wos[0].vendor and d.vendor and not vendors_agree(wos[0].vendor, d.vendor):
             d.warnings.append(f"invoice vendor '{d.vendor}' differs from work order vendor '{wos[0].vendor}'")
 

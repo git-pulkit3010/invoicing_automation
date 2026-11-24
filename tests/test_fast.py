@@ -286,12 +286,16 @@ def test_decide_writes_a_fresh_excel_with_messages_and_formulas(setup):
     assert go["Message"] == "Yes, pay $13,680.00: 152 hrs x $90.00 = $13,680.00, matches the timesheet and work order."
     assert (held["Verdict"], held["Pay?"]) == ("REVIEW_REQUIRED", "No")
     assert held["Message"] == "No, needs review: work order for Maya Rao expired on 2026-03-31"
-    assert (go["Timesheet hours"], go["Work order rate ($/hr)"], go["Invoice amount ($)"]) == (152, 90, 13680)
-    assert go["Expected amount ($)"].startswith("=IF(AND(ISNUMBER(") and "*" in go["Expected amount ($)"]
+    assert hdr == ["Verdict", "Pay?", "Message", "Vendor", "Invoice #", "Consultant", "Timesheet hours",
+                   "Rate ($/hr)", "Expected ($)", "Invoiced ($)", "Difference ($)"]
+    assert (go["Consultant"], go["Timesheet hours"], go["Rate ($/hr)"], go["Invoiced ($)"]) == ("Jordan Lee", 152, 90, 13680)
+    assert go["Expected ($)"].startswith("=IF(AND(ISNUMBER(") and "*" in go["Expected ($)"]
     assert go["Difference ($)"].startswith("=IF(AND(ISNUMBER(")
-    assert {"Summary", "Notes"} <= set(wb.sheetnames)
-    assert wb["Summary"]["C8"].value.startswith("=SUMIFS(")        # MATCH invoice count is a formula
+    assert wb.sheetnames == ["Results", "Summary", "Details"]
+    assert wb["Summary"]["C5"].value.startswith("=COUNTIF(")       # MATCH invoice count is a formula
     assert all(c.font.name == "Arial" for c in ws[1])
+    details = [r for r in wb["Details"].iter_rows(min_row=2, values_only=True)]
+    assert any(r[0] == "BP-77" and "get a renewed work order" in (r[11] or "") for r in details)
     # a second run replaces the file rather than appending to it
     run("--db", db, "decide", "--work", work, "--month", "2026-10", "--xlsx", out)
     assert load_workbook(out)["Results"].max_row == 3

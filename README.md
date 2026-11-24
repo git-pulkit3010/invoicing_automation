@@ -45,10 +45,12 @@ invoice PDFs ─► 1 convert ─► 2 rules read ─► 3 verify ────�
    - "No, needs review: work order for Maya Rao expired on 2026-03-31"
 
    The results go to a new Excel file on every run (`report.xlsx`, or the path given with `--xlsx`):
-   - **Results:** one row per invoice line, with verdict, Pay? (Yes/No), message and the cross-checked
-     figures. Expected amount and Difference are Excel formulas.
-   - **Summary:** counts and amounts per verdict.
-   - **Notes:** where each column's figures come from.
+   - **Results:** one row per invoice, with Verdict, Pay? (Yes/No), Message, Vendor, Invoice #,
+     Consultant, Timesheet hours, Rate, Expected, Invoiced and Difference. Expected and Difference
+     are Excel formulas.
+   - **Summary:** counts and amounts per verdict, and where the numbers come from.
+   - **Details:** the audit trail: file name, ATT ID, period, invoice hours and rate,
+     subtotal/total, work order dates, full reasons and notes.
 
    The same results are also written as Markdown, CSV and JSON.
 

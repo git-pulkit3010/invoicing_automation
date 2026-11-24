@@ -55,7 +55,7 @@ right outcome.
 
 ## 4. Report
 
-Send `W/report.xlsx` (Results, Summary and Notes sheets; each invoice has Pay? Yes/No and a
+Send `W/report.xlsx` (Results, Summary and Details sheets; each invoice has Pay? Yes/No and a
 short message) and `W/report.md`. Reply in a few lines:
 - how many invoices are MATCH, MISMATCH and REVIEW_REQUIRED, with amounts
 - each invoice's message, as the report writes it
