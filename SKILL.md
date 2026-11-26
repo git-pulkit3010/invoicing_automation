@@ -13,6 +13,10 @@ Run every command from the project folder with its environment's Python, for exa
 `.venv/bin/python -m invoice_check --db data/recon.db ...`. Below, `IC` stands for that
 command prefix.
 
+If a folder watcher is already running (`python -m invoice_check watch ROOT`), don't run the
+steps below for files in `ROOT/inbox`: the watcher handles them, and its reports are in
+`ROOT/reports/`. To start one for a user, see "Watch a folder" in README.md.
+
 ## 0. Reference data (only when new data arrives)
 
 - New month's ATT Time Report: `IC ts-load REPORT.xlsx`

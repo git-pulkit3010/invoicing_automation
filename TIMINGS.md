@@ -47,13 +47,15 @@ rate compared with the subtotal), the October run gives exactly his skill's verd
 
 ## Tests
 
-`python -m pytest` runs 68 tests in about 4 s, all on invented data:
+`python -m pytest` runs 76 tests in about 6 s, all on invented data:
 
 - 37 tests for the decision rules, messages and document handling, including subtotal vs total,
   the review policy and duplicate days
 - 16 for the database, linking and lookups
 - 15 for the combined pipeline, including end-to-end runs through the command line with real PDFs
   and the Excel output
+- 8 for the folder watcher: drop-in to report, a second batch, half-written and temporary files,
+  invoices arriving before a timesheet, a failing agent, no-agent mode, and the live loop
 
 Writing the Excel results adds about 0.1 s to `decide`. The October workbook recalculates in
 LibreOffice with 24 formulas and 0 errors.

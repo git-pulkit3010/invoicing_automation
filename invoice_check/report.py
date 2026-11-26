@@ -185,7 +185,21 @@ def to_xlsx(decisions: list[Decision], ts: Timesheet, errors: list[str], path) -
             ws[f"{L[h]}{r}"].fill = fill
         ws[f"{L['Verdict']}{r}"].font = bold
         ws[f"{L['Pay?']}{r}"].font = bold
-    last = max(len(decisions) + 1, 2)
+    # invoices that couldn't be read at all: listed too, so they are counted and can't be missed
+    review_fill = PatternFill("solid", start_color=FILLS[REVIEW])
+    for r, e in enumerate(errors, start=len(decisions) + 2):
+        file, _, why = e.partition(": ")
+        values = {"Verdict": REVIEW, "Pay?": "No",
+                  "Message": f"No, needs review: could not be read automatically. Check {file} by hand "
+                             "(reason on the Summary sheet)."}
+        for h, w, kind in RESULT_COLUMNS:
+            cell = ws[f"{L[h]}{r}"]
+            cell.value = values.get(h)
+            cell.font, cell.border = font, line
+            cell.alignment = Alignment(vertical="top", wrap_text=kind == "wrap")
+        for h in ("Verdict", "Pay?"):
+            ws[f"{L[h]}{r}"].fill, ws[f"{L[h]}{r}"].font = review_fill, bold
+    last = max(len(decisions) + len(errors) + 1, 2)
     ws.auto_filter.ref = f"A1:{get_column_letter(len(RESULT_COLUMNS))}{last}"
 
     # ---- Summary ------------------------------------------------------------------------

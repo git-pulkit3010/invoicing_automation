@@ -246,7 +246,7 @@ def cmd_decide(a, con) -> int:
 # ------------------------------------------------------------------- parser --
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="invoice_check", description="Check vendor invoices before payment.")
-    p.add_argument("--db", type=Path, default=Path("data/recon.db"), help="database file (default data/recon.db)")
+    p.add_argument("--db", type=Path, help="database file (default data/recon.db; for watch, ROOT/recon.db)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def add(name, fn, needs_db=True):
@@ -273,6 +273,20 @@ def build_parser() -> argparse.ArgumentParser:
     s = add("fast", cmd_fast); s.add_argument("invoices", type=Path)
     s.add_argument("--work", type=Path, required=True); s.add_argument("--month", required=True)
     s.add_argument("--pulkit", type=Path, help="use another copy of Pulkit's extractor (folder containing invoicing/)")
+    s = add("watch", cmd_watch, needs_db=False); s.add_argument("root", type=Path,
+        help="folder to watch; drop files into ROOT/inbox/invoices, timesheets or work_orders")
+    s.add_argument("--month", help="timesheet month to check against (default: newest loaded)")
+    s.add_argument("--interval", type=float, default=5.0, help="seconds between folder scans (default 5)")
+    s.add_argument("--settle", type=float, default=10.0,
+                   help="seconds a file must stay unchanged before it is read (default 10)")
+    s.add_argument("--agent-cmd", default=None,
+                   help="command run for each invoice the rules can't settle; {prompt} and {work} are "
+                        "filled in (default: Claude Code headless on the Haiku model)")
+    s.add_argument("--no-agent", action="store_true", help="don't run an agent; report those invoices unchecked")
+    s.add_argument("--agent-workers", type=int, default=4, help="agents run in parallel (default 4)")
+    s.add_argument("--agent-timeout", type=float, default=600.0, help="seconds per agent (default 600)")
+    s.add_argument("--record", action="store_true", help="save decisions (duplicate-approval check)")
+    s.add_argument("--once", action="store_true", help="handle what is waiting, then exit (for scheduled runs)")
     s = add("decide", cmd_decide); s.add_argument("--work", type=Path, required=True)
     s.add_argument("--month", required=True, help="timesheet month to check against, YYYY-MM")
     s.add_argument("--record", action="store_true", help="save decisions (enables the duplicate-approval check)")
@@ -280,8 +294,27 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def cmd_watch(a, con=None) -> int:
+    import logging
+    from .watcher import DEFAULT_AGENT_CMD, WatchConfig, ensure_layout, watch
+    ensure_layout(a.root)
+    handlers = [logging.StreamHandler(), logging.FileHandler(a.root / "watcher.log", encoding="utf-8")]
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", handlers=handlers,
+                        force=True)
+    cfg = WatchConfig(root=a.root, db=a.db, interval=a.interval, settle=a.settle, month=a.month,
+                      agent_cmd=None if a.no_agent else (a.agent_cmd or DEFAULT_AGENT_CMD),
+                      agent_workers=a.agent_workers, agent_timeout=a.agent_timeout, record=a.record)
+    try:
+        watch(cfg, once=a.once)
+    except KeyboardInterrupt:
+        logging.getLogger("invoice_check.watch").info("stopped")
+    return 0
+
+
 def main(argv=None) -> int:
     a = build_parser().parse_args(argv)
+    if a.db is None:
+        a.db = (a.root / "recon.db") if a.cmd == "watch" else Path("data/recon.db")
     con = None
     try:
         if a.needs_db:

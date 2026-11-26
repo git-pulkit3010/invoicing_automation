@@ -109,6 +109,51 @@ python -m invoice_check $DB expected ab1234 --month 2026-10
 error such as a timesheet month that hasn't been loaded. `--record` saves the decisions, so an
 approved invoice can't be approved again.
 
+## Watch a folder (hands-off)
+
+```bash
+python -m invoice_check watch shared/invoice-check            # keeps running; Ctrl+C to stop
+```
+
+It creates this layout and checks it every 5 seconds:
+
+```
+shared/invoice-check/
+  inbox/timesheets/     drop the month's ATT Time Report (.xlsx)  -> loaded into the database
+  inbox/work_orders/    drop new or renewed work orders (.pdf)    -> added to the database
+  inbox/invoices/       drop invoices (.pdf)                      -> checked as one batch
+  reports/              <run>_<month>.xlsx for every batch        <- open this
+  runs/<run>/           Markdown, extractions, agent logs, report.md/.csv/.json
+  processed/            originals, moved here once handled
+  watcher.log           what happened and when
+```
+
+- A file is only read once it has stopped changing for 10 seconds (`--settle`), so half-copied files and
+  temporary files (`~$…`, `.crdownload`, `.part`) are never touched.
+- Timesheets load first, then work orders, then invoices, so a batch is always checked against the newest data.
+  Invoices wait in the inbox (with a note in the log) until a timesheet has been loaded.
+- Invoices dropped together become one batch and one report. Each batch: the rules pass, then the agent
+  for the invoices the rules can't settle (in parallel), then the decision and the Excel report.
+- The agent is Claude Code, headless, on the Haiku model, allowed only to read and write files:
+  `claude -p --model haiku --add-dir {work} --allowedTools Read,Write -- {prompt}`. Change it with
+  `--agent-cmd` (`{prompt}` and `{work}` are filled in), or use `--no-agent`. Claude Code must be signed in on
+  that machine.
+- If the agent fails, times out or isn't set up, that invoice is still listed in Results as
+  REVIEW_REQUIRED, "could not be read automatically". Nothing is guessed, and the log and
+  `runs/<run>/agent_logs/` say why.
+- Options: `--month 2026-10` (default: newest loaded timesheet), `--interval`, `--settle`, `--agent-workers`
+  (default 4), `--agent-timeout` (default 600 s), `--record`, and `--once` (handle what's waiting, then exit).
+
+To keep it running:
+- **Linux:** a systemd service with `ExecStart=/path/.venv/bin/python -m invoice_check watch /path/shared/invoice-check`
+  and `Restart=always`, or `nohup … &`.
+- **Windows:** Task Scheduler, "At startup", running the same command with `.venv\Scripts\python.exe`.
+- **Scheduled instead of always on:** run with `--once` from cron or Task Scheduler every few minutes.
+
+It polls the folders rather than relying on OS file events, so it works the same on Windows, macOS, Linux and
+network shares, and needs no extra package. Timing on the October batch: report 2 seconds after the files
+settled (plus the agent time for scanned invoices).
+
 ## Database
 
 | Table / view | Holds |
@@ -126,7 +171,7 @@ git-ignored. Tests use invented data only:
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest            # 68 tests, about 4 s
+python -m pytest            # 76 tests, about 6 s
 ```
 
 `vendor/pulkit/` is the extractor from Pulkit's invoice-reconciliation skill, copied unchanged
